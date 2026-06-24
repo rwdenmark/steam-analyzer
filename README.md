@@ -1,9 +1,9 @@
 # Steam Analyzer
 
-A Spring Boot REST service that takes a Steam profile, pulls the user's library and
-playtime from the Steam Web API, and serves a backlog dashboard: what they own, what
-they have barely touched, and a "what to play next" pick. Same aggregate-a-third-party-API
-shape as [`wow-explorer`](https://github.com/rwdenmark/wow-explorer), different game.
+A Spring Boot REST service that takes a Steam profile, pulls the library and playtime from
+the Steam Web API, and serves a backlog dashboard of what you own and have not played, plus
+a play-next pick. Same aggregate-a-third-party-API shape as
+[`wow-explorer`](https://github.com/rwdenmark/wow-explorer), different game.
 
 The backend and a single static dashboard ship in one runnable jar. No database is
 required for v1. Responses are cached in memory, so repeated lookups do not re-hit Steam.
@@ -57,10 +57,10 @@ SteamID64. Numeric input skips the vanity-resolve call.
 
 The dashboard computes its summary in the browser from the library: games owned, hours
 played, never-played count and percent, and a backlog percentage. They recompute as you
-toggle filters, so they track the visible set. The profile card also shows the account's
-join date and years of service when Steam exposes the creation time. The play-next pick is a separate endpoint:
-it returns up to two random never-played games, reshuffled each call, with non-game apps
-and junk titles (test or server builds) skipped.
+toggle filters, so they track the visible set. A Years of Service card by the profile shows
+the account age when Steam exposes the creation time. Play-next is a separate endpoint that
+returns up to two random never-played games, reshuffled each call, with non-game apps and
+junk titles skipped.
 
 ### Dashboard filters (toggles)
 
@@ -79,15 +79,13 @@ unstable, beta, or staging builds) are filtered from the library on load and nev
 The same name rule (`isJunkTitle`) drives the backend Play Next pick, so the two stay in
 sync.
 
-Free and Tools rely on each app's store metadata, which `GetOwnedGames` does not provide.
-To keep the initial load fast, that data is fetched lazily: the dashboard loads the
-library without it, and only the first time you press Free or Tools does it request
-`/library?enrich=true`, which looks up each game's `type` and `is_free` from the public
-store `appdetails` endpoint. That endpoint has no batch form and rate-limits near 200
-requests in five minutes, so the lookups run a few at a time (six concurrent) and are
-capped at 200 per request. Results are cached per appid for a week, so the wait happens
-once. A lookup that fails, and any game past the 200 cap, stays unenriched and is never
-hidden. The Played toggle and all sorting need no extra data and are always instant.
+Free and Tools need each app's `type` and `is_free`, which `GetOwnedGames` omits. That data
+is fetched lazily: the dashboard loads the library without it, and the first press of Free or
+Tools requests `/library?enrich=true` to pull those fields from the public store `appdetails`
+endpoint. That endpoint has no batch form and rate-limits near 200 requests per five minutes,
+so lookups run six at a time, capped at 200 per request, cached per appid for a week. A
+failed lookup, or a game past the cap, stays unenriched and is never hidden. Played and
+sorting need no extra data, so they stay instant.
 
 ## Error handling
 
@@ -95,7 +93,7 @@ hidden. The Played toggle and all sorting need no extra data and are always inst
 |---|---|
 | Vanity name resolves to nothing | `404` with a message telling the user to check the name |
 | Profile exists but Game details are private | `403` explaining how to make it Public (never an empty library) |
-| Steam times out, rate-limits (429), or returns 5xx | `502` with a friendly message |
+| Steam times out, rate-limits (429), or returns 5xx | `502` with a clear message |
 | Input is already a 17-digit SteamID | resolve step is skipped |
 
 ## Caching
@@ -106,7 +104,7 @@ Caffeine, configured in `CacheConfig`:
 - owned-games response, 5m TTL, shared by the library and next endpoints
 - resolved profile identity, 5m TTL
 - player summary (name, avatar) per SteamID64, 5m TTL
-- store appdetails (type / free flag) per appid, 7-day TTL (app type is effectively static)
+- store appdetails (type / free flag) per appid, 7-day TTL
 
 ## Tests
 

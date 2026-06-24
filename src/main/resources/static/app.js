@@ -439,6 +439,13 @@ function escapeHtml(s) {
 }
 
 function setBusy(busy) {
+  if (busy) {
+    goBtn.style.width = `${goBtn.offsetWidth}px`;  // lock the Analyze width
+    goBtn.classList.add("busy");
+  } else {
+    goBtn.classList.remove("busy");
+    goBtn.style.width = "";
+  }
   goBtn.disabled = busy;
   goBtn.textContent = busy ? "Working..." : "Analyze";
 }

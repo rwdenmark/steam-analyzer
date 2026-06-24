@@ -56,9 +56,14 @@ button#go {
   background: var(--accent);
   color: #0b1419;
   font-weight: 600;
+  font-size: 1.05rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
   cursor: pointer;
 }
 button#go:disabled { opacity: .55; cursor: default; }
+button#go.busy { font-size: .8rem; }
 
 .status {
   margin: 1.25rem 0 0;
