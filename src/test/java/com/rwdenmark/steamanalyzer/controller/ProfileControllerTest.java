@@ -1,7 +1,6 @@
 package com.rwdenmark.steamanalyzer.controller;
 
 import com.rwdenmark.steamanalyzer.controller.ProfileController;
-import com.rwdenmark.steamanalyzer.dto.AnalyzerStats;
 import com.rwdenmark.steamanalyzer.dto.OwnedGame;
 import com.rwdenmark.steamanalyzer.dto.ProfileSummary;
 import com.rwdenmark.steamanalyzer.error.NotFoundException;
@@ -30,17 +29,15 @@ class ProfileControllerTest {
     private static final String ID = "76561197960287930";
 
     @Test
-    void returnsProfileWithStats() throws Exception {
-        OwnedGame hl2 = OwnedGame.of(220, "Half-Life 2", 600, "img");
-        AnalyzerStats stats = new AnalyzerStats(2, 10.0, 1, 50.0, 0.5, List.of(hl2), List.of());
+    void returnsProfileIdentity() throws Exception {
         given(analyzer.getProfile(ID)).willReturn(
-                new ProfileSummary(ID, "Rabscuttle", "avatar", "url", stats));
+                new ProfileSummary(ID, "Rabscuttle", "avatar", "url", 1234567890L));
 
         mvc.perform(get("/api/profile/{id}", ID))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.steamId").value(ID))
                 .andExpect(jsonPath("$.personaName").value("Rabscuttle"))
-                .andExpect(jsonPath("$.stats.totalGames").value(2))
-                .andExpect(jsonPath("$.stats.neverPlayedPct").value(50.0));
+                .andExpect(jsonPath("$.createdAt").value(1234567890));
     }
 
     @Test

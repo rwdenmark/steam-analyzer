@@ -9,9 +9,6 @@ target/
 *.war
 *.log
 HELP.md
-.mvn/
-mvnw
-mvnw.cmd
 .idea/
 *.iml
 *.iws

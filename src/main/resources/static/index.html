@@ -23,7 +23,6 @@
       <input
         id="input"
         type="text"
-        value="mrzeu"
         placeholder="Vanity name (steamcommunity.com/id/NAME) or 17-digit SteamID"
         aria-label="Steam vanity name or SteamID"
         required />
@@ -32,13 +31,19 @@
 
     <p id="status" class="status" hidden></p>
 
-    <section id="profile" class="card profile" hidden>
-      <img id="avatar" class="avatar" alt="" />
-      <div>
-        <a id="persona" class="persona" href="#" target="_blank" rel="noopener"></a>
-        <div id="steamid" class="muted"></div>
-      </div>
-    </section>
+    <div class="profile-row">
+      <section id="profile" class="card profile" hidden>
+        <img id="avatar" class="avatar" alt="" />
+        <div>
+          <a id="persona" class="persona" href="#" target="_blank" rel="noopener"></a>
+          <div id="steamid" class="muted"></div>
+        </div>
+      </section>
+      <section id="service-card" class="card yos" hidden>
+        <div class="value" id="yos-value"></div>
+        <div class="label">Years Of Service</div>
+      </section>
+    </div>
 
     <section id="stats" class="stat-grid" hidden></section>
 
@@ -47,12 +52,23 @@
       <div id="next-list" class="next-list"></div>
     </section>
 
-    <section id="toggles" class="card toggles" hidden>
-      <h2>Remove</h2>
-      <div class="toggle-row">
-        <button type="button" class="toggle" data-filter="free">Free</button>
-        <button type="button" class="toggle" data-filter="tools">Tools</button>
-        <button type="button" class="toggle" data-filter="played">Played</button>
+    <section id="toggles" class="toggle-cards toggles" hidden>
+      <div class="card toggle-card">
+        <h2>Remove</h2>
+        <div class="toggle-row">
+          <button type="button" class="toggle" data-filter="free">Free</button>
+          <button type="button" class="toggle" data-filter="tools">Tools</button>
+          <button type="button" class="toggle" data-filter="played">Played</button>
+        </div>
+      </div>
+      <div class="card toggle-card">
+        <h2>Filters</h2>
+        <div class="toggle-row">
+          <button type="button" class="toggle" data-filter="barely"
+                  title="Count games under 1 hour as backlog / never played">Under 1h</button>
+          <button type="button" class="toggle" data-filter="group"
+                  title="Collapse likely sequels into one row">Group Games</button>
+        </div>
       </div>
     </section>
 

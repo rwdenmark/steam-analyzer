@@ -45,39 +45,49 @@ for the Steam calls. Frontend is a single static page (plain HTML/CSS/JS) served
 
 | Method & path | Returns |
 |---|---|
-| `GET /api/profile/{idOrVanity}` | Profile identity plus computed backlog stats |
+| `GET /api/profile/{idOrVanity}` | Profile identity (name, avatar, resolved SteamID64, account creation time) |
 | `GET /api/profile/{idOrVanity}/library?sort=playtime\|least\|name` | Owned games with playtime, each tagged with store type and free flag |
-| `GET /api/profile/{idOrVanity}/next` | Up to two never-played games to start next |
+| `GET /api/profile/{idOrVanity}/next` | Up to two random never-played games to start next, reshuffled each call |
 | `GET /api/health` | Liveness probe |
 
 `{idOrVanity}` accepts either the name from `steamcommunity.com/id/NAME` or a 17-digit
 SteamID64. Numeric input skips the vanity-resolve call.
 
-### Computed stats
+### Dashboard stats
 
-Total games owned, total hours played, never-played count and percent, a backlog score
-(never-played / total), the top five most-played, and up to two play-next
-recommendations. Recommendations are the alphabetically first two never-played actual
-games (non-game apps such as tools are skipped), a deterministic choice that is stable
-across calls.
+The dashboard computes its summary in the browser from the library: games owned, hours
+played, never-played count and percent, and a backlog percentage. They recompute as you
+toggle filters, so they track the visible set. The profile card also shows the account's
+join date and years of service when Steam exposes the creation time. The play-next pick is a separate endpoint:
+it returns up to two random never-played games, reshuffled each call, with non-game apps
+and junk titles (test or server builds) skipped.
 
 ### Dashboard filters (toggles)
 
 The library table has three client-side toggles, so they apply instantly with no refetch:
 
 - **Free** hides free-to-play games (uses the store `is_free` flag).
-- **Tools** hides anything that is not a game (dlc, tools, soundtracks, etc.).
+- **Tools** hides non-game store types (dlc, tools, soundtracks, etc.) using each app's `type`.
 - **Played** hides games with any recorded playtime, leaving only the backlog.
+- **Under 1h** counts games showing under 1 hour in the Hours column as backlog, so the backlog stats include them and, with **Played** active, they stay in the library instead of being hidden.
+- **Group Games** collapses likely sequels into one expandable row in the library, matched on a shared base name (subtitle after a colon dropped; trailing numbers, roman numerals, and edition words stripped) and summing their playtime. While active, the stat cards switch to series: Groups (total series), Never Played (fully unplayed series), and Backlog (% of series untouched).
 
 Sort options are most-played, least-played, and name.
+
+Entries whose name marks them as non-games (test, server, dedicated, uploader, public,
+unstable, beta, or staging builds) are filtered from the library on load and never shown, no toggle needed.
+The same name rule (`isJunkTitle`) drives the backend Play Next pick, so the two stay in
+sync.
 
 Free and Tools rely on each app's store metadata, which `GetOwnedGames` does not provide.
 To keep the initial load fast, that data is fetched lazily: the dashboard loads the
 library without it, and only the first time you press Free or Tools does it request
-`/library?enrich=true`, which enriches every game with its `type` and `is_free` from the
-public store `appdetails` endpoint. Those lookups are cached per appid for a week, so the
-wait happens once, and a lookup that fails leaves the game unenriched and never hidden.
-The Played toggle and all sorting need no extra data and are always instant.
+`/library?enrich=true`, which looks up each game's `type` and `is_free` from the public
+store `appdetails` endpoint. That endpoint has no batch form and rate-limits near 200
+requests in five minutes, so the lookups run a few at a time (six concurrent) and are
+capped at 200 per request. Results are cached per appid for a week, so the wait happens
+once. A lookup that fails, and any game past the 200 cap, stays unenriched and is never
+hidden. The Played toggle and all sorting need no extra data and are always instant.
 
 ## Error handling
 
@@ -94,7 +104,8 @@ Caffeine, configured in `CacheConfig`:
 
 - vanity name to SteamID64, 24h TTL (resolutions are stable)
 - owned-games response, 5m TTL, shared by the library and next endpoints
-- assembled profile + stats, 5m TTL
+- resolved profile identity, 5m TTL
+- player summary (name, avatar) per SteamID64, 5m TTL
 - store appdetails (type / free flag) per appid, 7-day TTL (app type is effectively static)
 
 ## Tests
@@ -103,10 +114,14 @@ Caffeine, configured in `CacheConfig`:
 ./mvnw test
 ```
 
-`AnalyzerServiceTest` covers the stat math as a pure function (no network).
-`AnalyzerServiceResolutionTest` covers vanity-vs-id branching, vanity miss, and the
-private-profile path with the Steam client mocked. `ProfileControllerTest` is a WebMvc
-slice test asserting the JSON and the 404/403 error mappings.
+`AnalyzerServiceTest` covers the play-next candidate filter as a pure function (no network). `AnalyzerServiceResolutionTest` covers vanity-vs-id branching,
+vanity miss, the private-profile path, the play-next pick, the enrich path, and the
+200-lookup cap with the Steam clients mocked. `SteamClientTest` and `SteamStoreClientTest`
+use `MockRestServiceServer` to run real Steam-shaped JSON through the map parsing: the
+vanity success/no-match codes, the response-envelope unwrapping, the timeout and
+error-to-502 mapping, and the appdetails type/free extraction with its `unknown()`
+fallbacks. `ProfileControllerTest` is a WebMvc slice test asserting the JSON and the
+404/403 error mappings.
 
 ## Deploy
 

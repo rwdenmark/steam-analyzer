@@ -1,5 +1,7 @@
 package com.rwdenmark.steamanalyzer.service;
 
+import com.rwdenmark.steamanalyzer.dto.AppDetails;
+import com.rwdenmark.steamanalyzer.dto.OwnedGame;
 import com.rwdenmark.steamanalyzer.dto.ProfileSummary;
 import com.rwdenmark.steamanalyzer.error.NotFoundException;
 import com.rwdenmark.steamanalyzer.error.PrivateProfileException;
@@ -12,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,14 +40,11 @@ class AnalyzerServiceResolutionTest {
     @Test
     void numericIdSkipsVanityResolution() {
         given(steam.playerSummary(STEAM_ID)).willReturn(Optional.of(summary()));
-        given(steam.ownedGames(STEAM_ID)).willReturn(publicLibrary());
 
         ProfileSummary result = service.getProfile(STEAM_ID);
 
         assertThat(result.steamId()).isEqualTo(STEAM_ID);
         assertThat(result.personaName()).isEqualTo("Rabscuttle");
-        assertThat(result.stats().totalGames()).isEqualTo(2);
-        assertThat(result.stats().neverPlayedCount()).isEqualTo(1);
         verify(steam, never()).resolveVanity(org.mockito.ArgumentMatchers.anyString());
     }
 
@@ -52,7 +52,6 @@ class AnalyzerServiceResolutionTest {
     void vanityNameIsResolvedFirst() {
         given(steam.resolveVanity("gabelogannewell")).willReturn(Optional.of(STEAM_ID));
         given(steam.playerSummary(STEAM_ID)).willReturn(Optional.of(summary()));
-        given(steam.ownedGames(STEAM_ID)).willReturn(publicLibrary());
 
         ProfileSummary result = service.getProfile("gabelogannewell");
 
@@ -71,22 +70,97 @@ class AnalyzerServiceResolutionTest {
 
     @Test
     void privateLibraryThrowsPrivateProfile() {
-        given(steam.playerSummary(STEAM_ID)).willReturn(Optional.of(summary()));
         given(steam.ownedGames(STEAM_ID)).willReturn(Map.of()); // empty response = private
 
-        assertThatThrownBy(() -> service.getProfile(STEAM_ID))
+        assertThatThrownBy(() -> service.getLibrary(STEAM_ID, "playtime", false))
                 .isInstanceOf(PrivateProfileException.class)
                 .hasMessageContaining("private");
     }
 
     @Test
     void publicButEmptyLibraryIsNotPrivate() {
-        given(steam.playerSummary(STEAM_ID)).willReturn(Optional.of(summary()));
         given(steam.ownedGames(STEAM_ID)).willReturn(Map.of("game_count", 0));
 
-        ProfileSummary result = service.getProfile(STEAM_ID);
+        assertThat(service.getLibrary(STEAM_ID, "playtime", false)).isEmpty();
+    }
 
-        assertThat(result.stats().totalGames()).isZero();
+    @Test
+    void playNextReturnsAtMostTwoNeverPlayedGames() {
+        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of(
+                "game_count", 4,
+                "games", List.of(
+                        Map.of("appid", 1, "name", "Played Game", "playtime_forever", 300),
+                        Map.of("appid", 2, "name", "Backlog A", "playtime_forever", 0),
+                        Map.of("appid", 3, "name", "Backlog B", "playtime_forever", 0),
+                        Map.of("appid", 4, "name", "Backlog C", "playtime_forever", 0))));
+
+        List<OwnedGame> picks = service.getPlayNext(STEAM_ID);
+
+        assertThat(picks).hasSize(2);
+        assertThat(picks).allMatch(OwnedGame::neverPlayed);
+        assertThat(picks).extracting(OwnedGame::name)
+                .isSubsetOf("Backlog A", "Backlog B", "Backlog C");
+    }
+
+    @Test
+    void playNextIsEmptyWhenBacklogIsClear() {
+        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of(
+                "game_count", 1,
+                "games", List.of(Map.of("appid", 1, "name", "Played Game", "playtime_forever", 300))));
+
+        assertThat(service.getPlayNext(STEAM_ID)).isEmpty();
+    }
+
+    @Test
+    void enrichLooksUpStoreTypeAndFreeFlagPerGame() {
+        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of(
+                "game_count", 2,
+                "games", List.of(
+                        Map.of("appid", 220, "name", "Half-Life 2", "playtime_forever", 600),
+                        Map.of("appid", 323, "name", "Aseprite", "playtime_forever", 0))));
+        given(store.appDetails(220)).willReturn(new AppDetails("game", false));
+        given(store.appDetails(323)).willReturn(new AppDetails("tool", true));
+
+        List<OwnedGame> library = service.getLibrary(STEAM_ID, "name", true);
+
+        assertThat(library).extracting(OwnedGame::name)
+                .containsExactly("Aseprite", "Half-Life 2"); // sorted by name
+        assertThat(library).filteredOn(g -> g.appId() == 323)
+                .singleElement()
+                .satisfies(g -> {
+                    assertThat(g.type()).isEqualTo("tool");
+                    assertThat(g.free()).isTrue();
+                });
+        assertThat(library).filteredOn(g -> g.appId() == 220)
+                .singleElement()
+                .satisfies(g -> assertThat(g.type()).isEqualTo("game"));
+    }
+
+    @Test
+    void libraryWithoutEnrichNeverCallsTheStore() {
+        given(steam.ownedGames(STEAM_ID)).willReturn(publicLibrary());
+
+        service.getLibrary(STEAM_ID, "playtime", false);
+
+        verify(store, never()).appDetails(org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void enrichmentIsCappedToProtectTheRateLimit() {
+        int count = 250;
+        List<Map<String, Object>> games = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            games.add(Map.of("appid", i, "name", "Game " + i, "playtime_forever", 0));
+        }
+        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of("game_count", count, "games", games));
+        given(store.appDetails(org.mockito.ArgumentMatchers.anyLong()))
+                .willReturn(new AppDetails("game", false));
+
+        List<OwnedGame> library = service.getLibrary(STEAM_ID, "name", true);
+
+        assertThat(library).hasSize(count);
+        assertThat(library).filteredOn(g -> g.type() != null).hasSize(200);
+        assertThat(library).filteredOn(g -> g.type() == null).hasSize(50);
     }
 
     private static Map<String, Object> summary() {

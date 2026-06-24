@@ -2,21 +2,28 @@ package com.rwdenmark.steamanalyzer.service;
 
 import com.rwdenmark.steamanalyzer.config.CacheConfig;
 import com.rwdenmark.steamanalyzer.dto.AppDetails;
-import com.rwdenmark.steamanalyzer.dto.AnalyzerStats;
 import com.rwdenmark.steamanalyzer.dto.OwnedGame;
 import com.rwdenmark.steamanalyzer.dto.ProfileSummary;
 import com.rwdenmark.steamanalyzer.error.NotFoundException;
 import com.rwdenmark.steamanalyzer.error.PrivateProfileException;
+import com.rwdenmark.steamanalyzer.error.SteamUnavailableException;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
 /**
- * Resolves a profile, fetches its library, and computes the stats. {@link #computeStats}
+ * Resolves a profile and serves its library and play-next pick. {@link #playNextCandidates}
  * is a pure function so it can be unit-tested without the network.
  */
 @Service
@@ -24,11 +31,14 @@ public class AnalyzerService {
 
     private static final Pattern STEAMID64 = Pattern.compile("\\d{17}");
     private static final String CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/";
-    private static final int TOP_PLAYED_LIMIT = 5;
-    private static final int RECOMMENDATION_LIMIT = 2;
+    private static final int PLAY_NEXT_LIMIT = 2;
+    /** Steam's store appdetails endpoint rate-limits near 200 requests / 5 min per IP. */
+    private static final int MAX_ENRICH = 200;
+    private static final int ENRICH_CONCURRENCY = 6;
 
     private final SteamClient steam;
     private final SteamStoreClient store;
+    private final Random random = new Random();
 
     public AnalyzerService(SteamClient steam, SteamStoreClient store) {
         this.steam = steam;
@@ -40,14 +50,13 @@ public class AnalyzerService {
         String steamId = resolveSteamId(idOrVanity);
         Map<String, Object> summary = steam.playerSummary(steamId)
                 .orElseThrow(() -> new NotFoundException("No public Steam profile for ID " + steamId + "."));
-        // Stats need only playtime, not the per-app store lookups, so skip enrichment here.
-        AnalyzerStats stats = computeStats(fetchLibrary(steamId, false));
+        Object created = summary.get("timecreated");
         return new ProfileSummary(
                 steamId,
                 (String) summary.get("personaname"),
                 (String) summary.get("avatarfull"),
                 (String) summary.get("profileurl"),
-                stats
+                created instanceof Number n ? n.longValue() : null
         );
     }
 
@@ -60,12 +69,12 @@ public class AnalyzerService {
         return sortLibrary(games, sort);
     }
 
+    /** Up to two random never-played games, reshuffled each call. Empty when the backlog is clear. */
     public List<OwnedGame> getPlayNext(String idOrVanity) {
-        List<OwnedGame> picks = computeStats(fetchLibrary(resolveSteamId(idOrVanity), false)).recommendations();
-        if (picks.isEmpty()) {
-            throw new NotFoundException("No never-played games in this library. The backlog is clear.");
-        }
-        return picks;
+        List<OwnedGame> candidates = new ArrayList<>(
+                playNextCandidates(fetchLibrary(resolveSteamId(idOrVanity), false)));
+        Collections.shuffle(candidates, random);
+        return candidates.stream().limit(PLAY_NEXT_LIMIT).toList();
     }
 
     private String resolveSteamId(String idOrVanity) {
@@ -89,14 +98,36 @@ public class AnalyzerService {
         return enrich ? enrichDetails(games) : games;
     }
 
-    /** A failed appdetails lookup leaves the game unenriched, so it is never wrongly hidden. */
+    /**
+     * Looks up each game's store type and free flag. The appdetails endpoint has no batch form
+     * and rate-limits near 200 requests / 5 min per IP, so lookups run a few at a time and are
+     * capped at {@link #MAX_ENRICH} per request. Games past the cap, and any lookup that fails,
+     * stay unenriched, so they count as non-free games and are never wrongly hidden.
+     */
     private List<OwnedGame> enrichDetails(List<OwnedGame> games) {
-        return games.stream()
-                .map(g -> {
-                    AppDetails details = store.appDetails(g.appId());
-                    return g.enriched(details.type(), details.free());
-                })
-                .toList();
+        int cap = Math.min(games.size(), MAX_ENRICH);
+        try (ExecutorService pool = Executors.newFixedThreadPool(ENRICH_CONCURRENCY)) {
+            List<Future<OwnedGame>> futures = games.stream()
+                    .limit(cap)
+                    .map(g -> pool.submit(() -> {
+                        AppDetails details = store.appDetails(g.appId());
+                        return g.enriched(details.type(), details.free());
+                    }))
+                    .toList();
+            List<OwnedGame> enriched = new ArrayList<>(games.size());
+            for (Future<OwnedGame> future : futures) {
+                enriched.add(future.get());
+            }
+            // Games beyond the cap keep their unenriched form, so they are never hidden.
+            enriched.addAll(games.subList(cap, games.size()));
+            return enriched;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SteamUnavailableException("Library enrichment was interrupted.", e);
+        } catch (ExecutionException e) {
+            // store.appDetails handles its own failures and returns unknown(), so this is unexpected.
+            throw new SteamUnavailableException("Library enrichment failed.", e.getCause());
+        }
     }
 
     /**
@@ -126,34 +157,13 @@ public class AnalyzerService {
         return OwnedGame.of(appId, name, asInt(g.get("playtime_forever")), headerImage(appId));
     }
 
-    /**
-     * Top-played excludes never-played games (they all tie at zero). Recommendations are the
-     * alphabetically first two never-played games, tools skipped, deterministic for testing.
-     */
-    public static AnalyzerStats computeStats(List<OwnedGame> games) {
-        int total = games.size();
-        long totalMinutes = games.stream().mapToLong(OwnedGame::playtimeMinutes).sum();
-        double totalHours = round1(totalMinutes / 60.0);
-
-        int neverPlayed = (int) games.stream().filter(OwnedGame::neverPlayed).count();
-        double neverPct = total == 0 ? 0.0 : round1(neverPlayed * 100.0 / total);
-        double backlogScore = total == 0 ? 0.0 : round3((double) neverPlayed / total);
-
-        List<OwnedGame> topPlayed = games.stream()
-                .filter(g -> g.playtimeMinutes() > 0)
-                .sorted(Comparator.comparingInt(OwnedGame::playtimeMinutes).reversed())
-                .limit(TOP_PLAYED_LIMIT)
-                .toList();
-
-        List<OwnedGame> recommendations = games.stream()
+    /** Never-played actual games with junk titles skipped, the pool getPlayNext draws random picks from. */
+    static List<OwnedGame> playNextCandidates(List<OwnedGame> games) {
+        return games.stream()
                 .filter(OwnedGame::neverPlayed)
                 .filter(OwnedGame::isGame)
                 .filter(g -> !isJunkTitle(g.name()))
-                .sorted(Comparator.comparing((OwnedGame g) -> g.name().toLowerCase()))
-                .limit(RECOMMENDATION_LIMIT)
                 .toList();
-
-        return new AnalyzerStats(total, totalHours, neverPlayed, neverPct, backlogScore, topPlayed, recommendations);
     }
 
     private static List<OwnedGame> sortLibrary(List<OwnedGame> games, String sort) {
@@ -165,9 +175,12 @@ public class AnalyzerService {
         return games.stream().sorted(comparator).toList();
     }
 
+    /** Names that mark non-game entries (beta/server/dev builds, uploaders). Kept in sync with the frontend. */
     private static boolean isJunkTitle(String name) {
         String n = name.toLowerCase();
-        return n.contains("public") || n.contains("test") || n.contains("server") || n.contains("unstable");
+        return n.contains("public") || n.contains("test") || n.contains("server")
+                || n.contains("unstable") || n.contains("dedicated") || n.contains("uploader")
+                || n.contains("beta") || n.contains("staging");
     }
 
     private static String headerImage(long appId) {
@@ -180,13 +193,5 @@ public class AnalyzerService {
 
     private static long asLong(Object o) {
         return o instanceof Number n ? n.longValue() : 0L;
-    }
-
-    private static double round1(double v) {
-        return Math.round(v * 10.0) / 10.0;
-    }
-
-    private static double round3(double v) {
-        return Math.round(v * 1000.0) / 1000.0;
     }
 }

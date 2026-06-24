@@ -13,8 +13,10 @@ public class CacheConfig {
 
     /** Resolved vanity name to SteamID64. Stable, so cached longer. */
     public static final String VANITY_CACHE = "vanity";
-    /** SteamID64 to computed profile and stats. Short TTL keeps it fresh. */
+    /** idOrVanity to resolved profile identity. Short TTL keeps it fresh. */
     public static final String PROFILE_CACHE = "profiles";
+    /** SteamID64 to player summary (name, avatar). Short TTL keeps it fresh. */
+    public static final String SUMMARY_CACHE = "summaries";
     /** SteamID64 to owned-games list, shared by the library and next endpoints. */
     public static final String LIBRARY_CACHE = "libraries";
     /** AppID to store type and free flag. App types rarely change, so cached for a week. */
@@ -22,7 +24,7 @@ public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager manager = new CaffeineCacheManager(PROFILE_CACHE, LIBRARY_CACHE);
+        CaffeineCacheManager manager = new CaffeineCacheManager(PROFILE_CACHE, LIBRARY_CACHE, SUMMARY_CACHE);
         manager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(Duration.ofMinutes(5))
                 .maximumSize(1_000));

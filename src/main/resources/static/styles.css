@@ -11,17 +11,20 @@
 
 * { box-sizing: border-box; }
 
+/* One knob for overall scale: 16px -> 22.4px bumps every rem-based size up 40%. */
+html { font-size: 140%; }
+
 body {
   margin: 0;
   font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--edge);
   color: var(--text);
   line-height: 1.5;
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .container {
-  max-width: 640px;
+  max-width: 40rem;
   min-height: 100vh;
   margin: 0 auto;
   padding: 1.25rem 1.1rem 3.5rem;
@@ -31,7 +34,7 @@ body {
 
 header h1 { margin: 0 0 1.6rem; font-size: 1.65rem; color: #fff; }
 .title { display: flex; align-items: center; gap: .6rem; }
-.logo { width: 30px; height: 30px; fill: var(--accent); flex: none; }
+.logo { width: 1.875rem; height: 1.875rem; fill: var(--accent); flex: none; }
 
 form#lookup { display: flex; gap: .6rem; }
 
@@ -74,14 +77,27 @@ button#go:disabled { opacity: .55; cursor: default; }
 }
 
 .profile { display: flex; align-items: center; gap: 1rem; }
-.avatar { width: 56px; height: 56px; border-radius: 4px; }
+.avatar { width: 3.5rem; height: 3.5rem; border-radius: 4px; }
 .persona { color: #fff; font-size: 1.15rem; font-weight: 600; text-decoration: none; }
 .persona:hover { color: var(--accent); }
 .muted { color: var(--muted); font-size: .85rem; }
 
+.profile-row { display: flex; gap: .75rem; align-items: stretch; }
+.profile-row .profile { flex: 1; }
+.yos {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: .4rem 1.2rem;
+}
+.yos .value { font-size: 1.8rem; font-weight: 700; color: #fff; line-height: 1.1; }
+.yos .label { color: var(--muted); font-size: .8rem; margin-top: .15rem; }
+
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(8.4375rem, 1fr));
   gap: .75rem;
   margin-top: .75rem;
 }
@@ -99,10 +115,10 @@ button#go:disabled { opacity: .55; cursor: default; }
 .next h2, .toggles h2, .lib-head h2 { margin: 0 0 .35rem; font-size: 1.05rem; color: #fff; }
 
 .next-list { display: flex; gap: 1rem; flex-wrap: wrap; }
-.next-item { display: flex; align-items: center; gap: .7rem; flex: 1; min-width: 220px; }
+.next-item { display: flex; align-items: center; gap: .7rem; flex: 1; min-width: 13.75rem; }
 .next-img {
-  width: 92px;
-  height: 43px; /* Steam capsule ratio, so the logo fallback keeps the same footprint */
+  width: 5.75rem;
+  height: 2.6875rem; /* Steam capsule ratio, so the logo fallback keeps the same footprint */
   object-fit: contain;
   border-radius: 4px;
   background: var(--panel-2);
@@ -110,6 +126,8 @@ button#go:disabled { opacity: .55; cursor: default; }
 }
 .next-name { font-size: 1.05rem; font-weight: 600; color: var(--good); }
 
+.toggle-cards { display: flex; gap: .75rem; flex-wrap: wrap; align-items: stretch; }
+.toggle-cards .card { flex: 1; }
 .toggle-row { display: flex; gap: .5rem; flex-wrap: wrap; }
 .toggle {
   padding: .4rem .9rem;
@@ -157,14 +175,13 @@ table.library { width: 100%; border-collapse: collapse; }
 }
 .library td { padding: .5rem .25rem; border-bottom: 1px solid var(--panel-2); }
 .library .num { text-align: right; font-variant-numeric: tabular-nums; }
+.group-row { cursor: pointer; }
+.group-row td { font-weight: 600; color: #fff; }
+.group-caret { display: inline-block; width: 1em; color: var(--accent); font-weight: 700; }
+.group-count { margin-left: .4rem; color: var(--muted); font-weight: 400; font-size: .8rem; }
+.group-member .member-name { padding-left: 1.6rem; color: var(--muted); }
 .library.loading thead { display: none; }
 .lib-loading {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: .7rem;
-  padding: 1.75rem .25rem;
-  color: var(--muted);
-  font-size: 1.25rem;
-}
-.lib-loading .cog { width: 1.9rem; height: 1.9rem; }
+  justify-content: flex-start

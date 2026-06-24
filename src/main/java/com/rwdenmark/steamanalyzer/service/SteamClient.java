@@ -51,6 +51,7 @@ public class SteamClient {
     }
 
     /** Display name, avatar, and profile URL for one SteamID64. Empty if none. */
+    @Cacheable(value = CacheConfig.SUMMARY_CACHE, key = "#steamId")
     @SuppressWarnings("unchecked")
     public Optional<Map<String, Object>> playerSummary(String steamId) {
         Map<String, Object> response = get("/ISteamUser/GetPlayerSummaries/v2/", uri -> uri
@@ -78,7 +79,7 @@ public class SteamClient {
             Map<String, Object> envelope = client.get()
                     .uri(uri -> queryFn.apply(uri.path(path)).build())
                     .retrieve()
-                    .onStatus(HttpStatusCode::isError, (req, resp) -> {
+                    .onStatus(SteamClient::isUnavailable, (req, resp) -> {
                         throw new SteamUnavailableException(
                                 "Steam returned " + resp.getStatusCode() + " for " + path, null);
                     })
@@ -91,6 +92,11 @@ public class SteamClient {
             log.warn("Steam request to {} timed out: {}", path, timeout.getMessage());
             throw new SteamUnavailableException("Steam did not respond in time.", timeout);
         }
+    }
+
+    /** 5xx and 429 mean Steam is down or throttling us, so surface 502. Other 4xx are our bad request. */
+    private static boolean isUnavailable(HttpStatusCode status) {
+        return status.is5xxServerError() || status.value() == 429;
     }
 
     private static int asInt(Object o) {
