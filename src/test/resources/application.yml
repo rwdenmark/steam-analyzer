@@ -1,0 +1,3 @@
+steam:
+  api-key: test-key-not-used
+  api-base-url: https://api.steampowered.com

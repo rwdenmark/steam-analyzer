@@ -1,0 +1,19 @@
+server:
+  # Hosts inject the listen port via $PORT; default to 8080 locally.
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: steam-analyzer
+  # Load the repo-root .env (KEY=VALUE) so STEAM_API_KEY resolves when running from
+  # the IDE or `mvn spring-boot:run`. `optional:` keeps tests/CI green with no .env.
+  config:
+    import: "optional:file:.env[.properties]"
+
+steam:
+  api-key: ${STEAM_API_KEY}
+  api-base-url: https://api.steampowered.com
+
+logging:
+  level:
+    com.rwdenmark.steamanalyzer: INFO
