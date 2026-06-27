@@ -130,5 +130,3 @@ included `Dockerfile`:
 docker build -t steam-analyzer .
 docker run -p 8080:8080 -e STEAM_API_KEY=your_key steam-analyzer
 ```
-
-Hosts that inject `$PORT` (and the free OCI A1 box) work without changes.
