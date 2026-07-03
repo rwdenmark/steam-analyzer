@@ -40,9 +40,11 @@ public class SteamClient {
 
     /**
      * Resolves a vanity name to a SteamID64. Empty when Steam reports no match. Misses are
-     * not cached, so a freshly claimed vanity name resolves on the next try.
+     * not cached, so a freshly claimed vanity name resolves on the next try. Spring's cache
+     * layer stores the unwrapped Optional, so in the unless expression #result is the
+     * unwrapped value and a miss shows up as null, not as an empty Optional.
      */
-    @Cacheable(value = CacheConfig.VANITY_CACHE, key = "#vanityName.toLowerCase()", unless = "#result.isEmpty()")
+    @Cacheable(value = CacheConfig.VANITY_CACHE, key = "#vanityName.toLowerCase()", unless = "#result == null")
     public Optional<String> resolveVanity(String vanityName) {
         Map<String, Object> response = get("/ISteamUser/ResolveVanityURL/v1/", uri -> uri
                 .queryParam("key", apiKey)
