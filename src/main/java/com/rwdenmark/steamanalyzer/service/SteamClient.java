@@ -18,7 +18,7 @@ import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
- * Wraps the Steam Web API: attaches the server-side key, returns the raw response map, and
+ * Wraps the Steam Web API. Attaches the server-side key, returns the raw response map, and
  * turns timeouts and 5xx into {@link SteamUnavailableException} so callers never see a
  * transport error.
  */
@@ -27,7 +27,7 @@ public class SteamClient {
 
     private static final Logger log = LoggerFactory.getLogger(SteamClient.class);
 
-    /** ResolveVanityURL success codes: 1 = match found, 42 = no match. */
+    /** ResolveVanityURL reports success code 1 for a match and 42 for no match. */
     private static final int VANITY_MATCH = 1;
 
     private final RestClient client;

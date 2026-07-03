@@ -35,8 +35,8 @@ for the Steam calls. Frontend is a single static page (plain HTML/CSS/JS) served
    ./mvnw spring-boot:run
    ```
 
-   Or with a system Maven: `mvn spring-boot:run`. You can also export the key instead of
-   using a file: `STEAM_API_KEY=xxxx mvn spring-boot:run`.
+   Or with a system Maven, `mvn spring-boot:run`. You can also export the key instead of
+   using a file, `STEAM_API_KEY=xxxx mvn spring-boot:run`.
 
 3. Open http://localhost:8080 and enter a vanity name or a 17-digit SteamID.
 
@@ -64,7 +64,7 @@ junk titles skipped.
 ### Dashboard filters (toggles)
 
 The library table has five client-side toggles. They apply instantly with no refetch, except
-the first press of Free or Tools, which fetches extra data once (see below):
+the first press of Free or Tools, which fetches extra data once (see below).
 
 - **Free** hides free-to-play games (uses the store `is_free` flag).
 - **Tools** hides non-game store types (dlc, tools, soundtracks, etc.) using each app's `type`.
@@ -83,7 +83,8 @@ Free and Tools need each app's `type` and `is_free`, which `GetOwnedGames` omits
 is fetched lazily. The dashboard loads the library without it, and the first press of Free or
 Tools requests `/library?enrich=true` to pull those fields from the public store `appdetails`
 endpoint. That endpoint has no batch form and rate-limits near 200 requests per five minutes,
-so lookups run six at a time, capped at 200 per request, cached per appid for a week. A
+so lookups run six at a time on one thread pool shared across requests, capped at 200 per
+request, cached per appid for a week. A
 failed lookup, or a game past the cap, stays unenriched and is never hidden. Played and
 sorting need no extra data, so they stay instant.
 
@@ -94,6 +95,7 @@ sorting need no extra data, so they stay instant.
 | Vanity name resolves to nothing | `404` with a message telling the user to check the name |
 | Profile exists but Game details are private | `403` explaining how to make it Public (never an empty library) |
 | Steam times out, rate-limits (429), or returns 5xx | `502` with a clear message |
+| Steam reply is missing its `response` envelope | `502`, never treated as a private profile |
 | Input is already a 17-digit SteamID | resolve step is skipped |
 | More than 15 profile requests per minute from one client | `429` asking the caller to slow down |
 
@@ -102,13 +104,17 @@ memory per instance, so a burst past that gets a `429` until the minute window c
 
 ## Caching
 
-Caffeine, configured in `CacheConfig`:
+Caffeine, configured in `CacheConfig`.
 
 - vanity name to SteamID64, 24h TTL (resolutions are stable)
 - owned-games response, 5m TTL, shared by the library and next endpoints
 - resolved profile identity, 5m TTL
 - player summary (name, avatar) per SteamID64, 5m TTL
 - store appdetails (type / free flag) per appid, 7-day TTL
+
+Only successes are cached. A vanity miss and a failed appdetails lookup are not stored, so
+a freshly claimed vanity name resolves on the next try and a bad lookup retries on the
+next request.
 
 ## Tests
 
@@ -125,14 +131,24 @@ error-to-502 mapping, and the appdetails type/free extraction with its `unknown(
 fallbacks. `ProfileControllerTest` is a WebMvc slice test asserting the JSON, the `junk`
 flag, and the 404/403 error mappings. `OwnedGameTest` covers the junk classifier's word
 boundaries. `ProfileRateLimiterTest` drives the sliding window through a clock seam, no
-sleeps, covering the pass, 429, expiry, and client-key paths.
+sleeps, covering the pass, 429, expiry, and client-key paths. `SteamClientCachingTest` and
+`SteamStoreClientCachingTest` run the clients behind the real cache to prove a vanity miss
+and a failed appdetails lookup retry instead of being cached. `LogSanitizerTest` proves the
+API key never survives into a log line. `HealthControllerTest` covers the probe.
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs the same suite on every push
+to main and every pull request.
 
 ## Deploy
 
 Build a jar with `./mvnw clean package` and run it with `STEAM_API_KEY` set, or use the
-included `Dockerfile`:
+included `Dockerfile`.
 
 ```
 docker build -t steam-analyzer .
 docker run -p 8080:8080 -e STEAM_API_KEY=your_key steam-analyzer
 ```
+
+## License
+
+MIT, see `LICENSE`.
