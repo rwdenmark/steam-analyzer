@@ -31,13 +31,6 @@ import java.util.regex.Pattern;
 public class AnalyzerService {
 
     private static final Pattern STEAMID64 = Pattern.compile("\\d{17}");
-    /**
-     * Words that mark non-game entries (beta/server/dev builds, uploaders). Matched on word
-     * boundaries so Testament and Republic stay visible. Kept in sync with the frontend.
-     */
-    private static final Pattern JUNK_WORDS = Pattern.compile(
-            "\\b(public|test|server|unstable|dedicated|uploader|beta|staging)\\b",
-            Pattern.CASE_INSENSITIVE);
     private static final String CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/";
     private static final int PLAY_NEXT_LIMIT = 2;
     /** Steam's store appdetails endpoint rate-limits near 200 requests / 5 min per IP. */
@@ -183,7 +176,7 @@ public class AnalyzerService {
         return games.stream()
                 .filter(OwnedGame::neverPlayed)
                 .filter(OwnedGame::isGame)
-                .filter(g -> !isJunkTitle(g.name()))
+                .filter(g -> !g.junk())
                 .toList();
     }
 
@@ -194,10 +187,6 @@ public class AnalyzerService {
             default -> Comparator.comparingInt(OwnedGame::playtimeMinutes).reversed();
         };
         return games.stream().sorted(comparator).toList();
-    }
-
-    private static boolean isJunkTitle(String name) {
-        return JUNK_WORDS.matcher(name).find();
     }
 
     private static String headerImage(long appId) {

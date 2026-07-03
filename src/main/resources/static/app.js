@@ -135,41 +135,19 @@ function renderService(createdAt) {
   show("service-card");
 }
 
-function statsFor(games) {
-  const total = games.length;
-  const totalMinutes = games.reduce((sum, g) => sum + g.playtimeMinutes, 0);
-  const never = games.filter(isUnplayed).length;
-  return {
-    totalGames: total,
-    totalHours: round1(totalMinutes / 60),
-    neverPlayedCount: never,
-    neverPlayedPct: total === 0 ? 0 : round1((never * 100) / total),
-  };
-}
-
 function round1(v) {
   return Math.round(v * 10) / 10;
 }
 
-function statCards(s) {
-  return [
-    [s.totalGames, "Games Owned"],
-    [s.totalHours.toLocaleString(), "Hours Played"],
-    [s.neverPlayedCount, "Never Played"],
-    [`${s.neverPlayedPct}%`, "Backlog"],
-  ];
-}
-
-// When Group Games is on, the cards count series instead of individual games.
-function groupStatCards(entries, games) {
+// One card builder for both modes. Flat counts games, Group Games counts series,
+// so count and never arrive pre-counted while hours always sum the visible games.
+function statCards(count, countLabel, games, never) {
   const totalMinutes = games.reduce((sum, g) => sum + g.playtimeMinutes, 0);
-  const groups = entries.length;
-  const never = entries.filter(entryUnplayed).length;
   return [
-    [groups, "Groups"],
+    [count, countLabel],
     [round1(totalMinutes / 60).toLocaleString(), "Hours Played"],
     [never, "Never Played"],
-    [`${groups === 0 ? 0 : round1((never * 100) / groups)}%`, "Backlog"],
+    [`${count === 0 ? 0 : round1((never * 100) / count)}%`, "Backlog"],
   ];
 }
 
@@ -225,13 +203,13 @@ async function renderNext() {
 function renderLibrary() {
   $("library-table").classList.remove("loading");
   const filtered = allGames.filter(passesFilters);
-  const games = sortGames(filtered);
+  const games = sortByCurrent(filtered, (g) => g.playtimeMinutes);
   if (filters.group) {
     const entries = buildGroups(games);
-    paintStats(groupStatCards(entries, filtered));
+    paintStats(statCards(entries.length, "Groups", filtered, entries.filter(entryUnplayed).length));
     $("library-body").innerHTML = entries.map(renderEntry).join("");
   } else {
-    paintStats(statCards(statsFor(filtered)));
+    paintStats(statCards(filtered.length, "Games Owned", filtered, filtered.filter(isUnplayed).length));
     $("library-body").innerHTML = flatRows(games);
   }
   show("library-section");
@@ -293,7 +271,7 @@ function buildGroups(games) {
       entries.push({ group: false, game: members[0], minutes: members[0].playtimeMinutes, name: members[0].name });
     }
   }
-  return sortEntries(entries);
+  return sortByCurrent(entries, (e) => e.minutes);
 }
 
 const CONNECTORS = new Set(["of", "the", "and", "a", "an", "to", "for", "vs", "in", "on", "&"]);
@@ -341,17 +319,19 @@ function isContiguous(a, b) {
   return false;
 }
 
-function sortEntries(entries) {
+// One sorter for flat games and group entries, driven by the dropdown.
+// minutesOf bridges the two shapes (g.playtimeMinutes vs e.minutes).
+function sortByCurrent(items, minutesOf) {
   const sort = sortSelect.value;
-  const e = [...entries];
+  const copy = [...items];
   if (sort === "name") {
-    e.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    copy.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   } else if (sort === "least") {
-    e.sort((a, b) => a.minutes - b.minutes);
+    copy.sort((a, b) => minutesOf(a) - minutesOf(b));
   } else {
-    e.sort((a, b) => b.minutes - a.minutes);
+    copy.sort((a, b) => minutesOf(b) - minutesOf(a));
   }
-  return e;
+  return copy;
 }
 
 function renderEntry(e) {
@@ -403,7 +383,8 @@ function resetFilters() {
 }
 
 function passesFilters(g) {
-  if (isJunkTitle(g.name)) return false;
+  // The backend classifies junk titles and tags each game, no name list here.
+  if (g.junk) return false;
   if (filters.free && g.free) return false;
   if (filters.tools && isToolLike(g)) return false;
   if (filters.played && !isUnplayed(g)) return false;
@@ -415,28 +396,8 @@ function isUnplayed(g) {
   return filters.barely ? g.playtimeHours < 1 : g.playtimeMinutes === 0;
 }
 
-// Non-game entries by name. Word-boundary match so Testament and Republic stay
-// visible. Mirrors the backend isJunkTitle, keep the word list in sync.
-const JUNK_WORDS = /\b(public|test|server|unstable|dedicated|uploader|beta|staging)\b/i;
-function isJunkTitle(name) {
-  return JUNK_WORDS.test(name);
-}
-
 function isToolLike(g) {
   return g.type != null && g.type.toLowerCase() !== "game";
-}
-
-function sortGames(games) {
-  const sort = sortSelect.value;
-  const copy = [...games];
-  if (sort === "name") {
-    copy.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-  } else if (sort === "least") {
-    copy.sort((a, b) => a.playtimeMinutes - b.playtimeMinutes);
-  } else {
-    copy.sort((a, b) => b.playtimeMinutes - a.playtimeMinutes);
-  }
-  return copy;
 }
 
 function escapeHtml(s) {

@@ -45,7 +45,7 @@ for the Steam calls. Frontend is a single static page (plain HTML/CSS/JS) served
 | Method & path | Returns |
 |---|---|
 | `GET /api/profile/{idOrVanity}` | Profile identity (name, avatar, resolved SteamID64, account creation time) |
-| `GET /api/profile/{idOrVanity}/library?sort=playtime\|least\|name` | Owned games with playtime, each tagged with store type and free flag |
+| `GET /api/profile/{idOrVanity}/library?sort=playtime\|least\|name` | Owned games with playtime, each tagged with a `junk` flag plus store type and free flag |
 | `GET /api/profile/{idOrVanity}/next` | Up to two random never-played games to start next, reshuffled each call |
 | `GET /api/health` | Liveness probe |
 
@@ -76,8 +76,8 @@ Sort options are most-played, least-played, and name.
 
 Entries whose name marks them as non-games (test, server, dedicated, uploader, public,
 unstable, beta, or staging builds) are filtered from the library on load and never shown, no toggle needed.
-The same name rule (`isJunkTitle`) drives the backend Play Next pick, so the two stay in
-sync.
+The backend classifies these once and tags each game with a `junk` flag, which also drives
+the Play Next pick, so the dashboard reads the flag instead of keeping its own word list.
 
 Free and Tools need each app's `type` and `is_free`, which `GetOwnedGames` omits. That data
 is fetched lazily. The dashboard loads the library without it, and the first press of Free or
@@ -95,6 +95,10 @@ sorting need no extra data, so they stay instant.
 | Profile exists but Game details are private | `403` explaining how to make it Public (never an empty library) |
 | Steam times out, rate-limits (429), or returns 5xx | `502` with a clear message |
 | Input is already a 17-digit SteamID | resolve step is skipped |
+| More than 15 profile requests per minute from one client | `429` asking the caller to slow down |
+
+The profile endpoints are rate limited to 15 requests per minute per client, tracked in
+memory per instance, so a burst past that gets a `429` until the minute window clears.
 
 ## Caching
 
@@ -118,8 +122,10 @@ vanity miss, the private-profile path, the play-next pick, the enrich path, and 
 use `MockRestServiceServer` to run real Steam-shaped JSON through the map parsing. That
 covers the vanity success/no-match codes, the response-envelope unwrapping, the timeout and
 error-to-502 mapping, and the appdetails type/free extraction with its `unknown()`
-fallbacks. `ProfileControllerTest` is a WebMvc slice test asserting the JSON and the
-404/403 error mappings.
+fallbacks. `ProfileControllerTest` is a WebMvc slice test asserting the JSON, the `junk`
+flag, and the 404/403 error mappings. `OwnedGameTest` covers the junk classifier's word
+boundaries. `ProfileRateLimiterTest` drives the sliding window through a clock seam, no
+sleeps, covering the pass, 429, expiry, and client-key paths.
 
 ## Deploy
 

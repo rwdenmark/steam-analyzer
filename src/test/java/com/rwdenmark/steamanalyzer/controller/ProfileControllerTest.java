@@ -77,12 +77,16 @@ class ProfileControllerTest {
     void returnsLibrary() throws Exception {
         given(analyzer.getLibrary(ID, "playtime", false)).willReturn(List.of(
                 OwnedGame.of(220, "Half-Life 2", 600, "img"),
-                OwnedGame.of(400, "Portal", 0, "img")));
+                OwnedGame.of(400, "Portal", 0, "img"),
+                OwnedGame.of(500, "Dedicated Server", 0, "img")));
 
         mvc.perform(get("/api/profile/{id}/library", ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].name").value("Half-Life 2"));
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].name").value("Half-Life 2"))
+                // The junk flag rides along so the frontend can hide junk without its own list.
+                .andExpect(jsonPath("$[0].junk").value(false))
+                .andExpect(jsonPath("$[2].junk").value(true));
     }
 
     @Test
