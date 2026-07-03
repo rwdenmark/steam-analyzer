@@ -1,7 +1,7 @@
 package com.rwdenmark.steamanalyzer.dto;
 
 /**
- * One owned game. playtimeMinutes is Steam's lifetime playtime_forever; playtimeHours is the
+ * One owned game. playtimeMinutes is Steam's lifetime playtime_forever. playtimeHours is the
  * rounded value the frontend shows. type and free come from a later store lookup and stay
  * null/false until enriched, so an unenriched game counts as non-free and is never hidden.
  */

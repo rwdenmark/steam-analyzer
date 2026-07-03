@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Liveness probe. CORS is opened to the portfolio and Funnel host so the Live Demo failover can read it. */
+/** Liveness probe. CORS is limited to the origins that poll this endpoint for the demo failover. */
 @RestController
 public class HealthController {
 

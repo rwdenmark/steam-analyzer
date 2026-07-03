@@ -2,8 +2,7 @@
 
 A Spring Boot REST service that takes a Steam profile, pulls the library and playtime from
 the Steam Web API, and serves a backlog dashboard of what you own and have not played, plus
-a play-next pick. Same aggregate-a-third-party-API shape as
-[`wow-explorer`](https://github.com/rwdenmark/wow-explorer), different game.
+a play-next pick.
 
 The backend and a single static dashboard ship in one runnable jar. No database is
 required for v1. Responses are cached in memory, so repeated lookups do not re-hit Steam.
@@ -18,8 +17,8 @@ for the Steam calls. Frontend is a single static page (plain HTML/CSS/JS) served
 
 - JDK 21
 - A free Steam Web API key from https://steamcommunity.com/dev/apikey
-- The target Steam profile must have **Game details** privacy set to **Public**, or the
-  library comes back empty.
+- The target Steam profile must have **Game details** privacy set to **Public**. A private
+  profile gets a `403` with instructions on making it Public, never an empty library.
 
 ## Run it locally
 
@@ -64,13 +63,14 @@ junk titles skipped.
 
 ### Dashboard filters (toggles)
 
-The library table has three client-side toggles, so they apply instantly with no refetch:
+The library table has five client-side toggles. They apply instantly with no refetch, except
+the first press of Free or Tools, which fetches extra data once (see below):
 
 - **Free** hides free-to-play games (uses the store `is_free` flag).
 - **Tools** hides non-game store types (dlc, tools, soundtracks, etc.) using each app's `type`.
 - **Played** hides games with any recorded playtime, leaving only the backlog.
 - **Under 1h** counts games showing under 1 hour in the Hours column as backlog, so the backlog stats include them and, with **Played** active, they stay in the library instead of being hidden.
-- **Group Games** collapses likely sequels into one expandable row in the library, matched on a shared base name (subtitle after a colon dropped; trailing numbers, roman numerals, and edition words stripped) and summing their playtime. While active, the stat cards switch to series: Groups (total series), Never Played (fully unplayed series), and Backlog (% of series untouched).
+- **Group Games** collapses likely sequels into one expandable row in the library, matched on a shared base name (subtitle after a colon dropped, then trailing numbers, roman numerals, and edition words stripped) and summing their playtime. While active, the stat cards switch to series. Groups is total series, Never Played is fully unplayed series, and Backlog is the percent of series untouched.
 
 Sort options are most-played, least-played, and name.
 
@@ -80,7 +80,7 @@ The same name rule (`isJunkTitle`) drives the backend Play Next pick, so the two
 sync.
 
 Free and Tools need each app's `type` and `is_free`, which `GetOwnedGames` omits. That data
-is fetched lazily: the dashboard loads the library without it, and the first press of Free or
+is fetched lazily. The dashboard loads the library without it, and the first press of Free or
 Tools requests `/library?enrich=true` to pull those fields from the public store `appdetails`
 endpoint. That endpoint has no batch form and rate-limits near 200 requests per five minutes,
 so lookups run six at a time, capped at 200 per request, cached per appid for a week. A
@@ -115,8 +115,8 @@ Caffeine, configured in `CacheConfig`:
 `AnalyzerServiceTest` covers the play-next candidate filter as a pure function (no network). `AnalyzerServiceResolutionTest` covers vanity-vs-id branching,
 vanity miss, the private-profile path, the play-next pick, the enrich path, and the
 200-lookup cap with the Steam clients mocked. `SteamClientTest` and `SteamStoreClientTest`
-use `MockRestServiceServer` to run real Steam-shaped JSON through the map parsing: the
-vanity success/no-match codes, the response-envelope unwrapping, the timeout and
+use `MockRestServiceServer` to run real Steam-shaped JSON through the map parsing. That
+covers the vanity success/no-match codes, the response-envelope unwrapping, the timeout and
 error-to-502 mapping, and the appdetails type/free extraction with its `unknown()`
 fallbacks. `ProfileControllerTest` is a WebMvc slice test asserting the JSON and the
 404/403 error mappings.

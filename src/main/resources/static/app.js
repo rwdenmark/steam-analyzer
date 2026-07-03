@@ -165,7 +165,7 @@ function groupStatCards(entries, games) {
   ];
 }
 
-// A series is unplayed when every game in it is unplayed; a singleton when its game is.
+// A series is unplayed when every game in it is unplayed. A singleton is unplayed when its game is.
 function entryUnplayed(e) {
   return e.group ? e.members.every(isUnplayed) : isUnplayed(e.game);
 }
@@ -245,7 +245,7 @@ const EDITION_WORDS = new Set([
   "goty", "hd", "redux", "anniversary", "edition", "collection", "ultimate",
 ]);
 
-// Base name: drop subtitle at the colon, then strip trailing numbers, roman numerals, editions.
+// The base name drops the subtitle at the colon, then strips trailing numbers, roman numerals, editions.
 function seriesBase(name) {
   let s = name.toLowerCase().replace(/[™®©]/g, "");
   s = s.split(/:|\s[-–—]\s/)[0];
@@ -290,8 +290,8 @@ function buildGroups(games) {
 
 const CONNECTORS = new Set(["of", "the", "and", "a", "an", "to", "for", "vs", "in", "on", "&"]);
 
-// Same universe = same first two words (unless the 2nd is a connector, e.g. "Age of ...");
-// same series = one base's words sit as a contiguous run inside another's.
+// Same universe = same first two words (unless the 2nd is a connector, e.g. "Age of ...").
+// Same series = one base's words sit as a contiguous run inside another's.
 function groupBases(bases) {
   const parent = new Map(bases.map((b) => [b, b]));
   function find(x) {
@@ -364,7 +364,7 @@ function renderEntry(e) {
   return header + members;
 }
 
-// Label = words the members' bases share up front, else the shortest base; connectors stay low.
+// Label = words the members' bases share up front, else the shortest base. Connectors stay low.
 function groupLabel(members) {
   const bases = members.map((m) => seriesBase(m.name));
   const prefix = commonWordPrefix(bases);

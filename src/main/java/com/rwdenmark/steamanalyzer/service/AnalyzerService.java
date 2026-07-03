@@ -131,7 +131,7 @@ public class AnalyzerService {
     }
 
     /**
-     * A public profile always returns game_count; a private one returns an empty object.
+     * A public profile always returns game_count. A private one returns an empty object.
      * Absence of both keys is the private signal, never treated as owning nothing.
      */
     private static boolean isPrivate(Map<String, Object> ownedResponse) {

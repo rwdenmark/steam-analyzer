@@ -1,6 +1,5 @@
 package com.rwdenmark.steamanalyzer.controller;
 
-import com.rwdenmark.steamanalyzer.controller.ProfileController;
 import com.rwdenmark.steamanalyzer.dto.OwnedGame;
 import com.rwdenmark.steamanalyzer.dto.ProfileSummary;
 import com.rwdenmark.steamanalyzer.error.NotFoundException;
