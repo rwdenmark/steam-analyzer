@@ -98,9 +98,20 @@ class SteamClientTest {
     }
 
     @Test
-    void missingResponseEnvelopeReturnsEmptyMap() {
+    void missingResponseEnvelopeBecomesSteamUnavailable() {
         server.expect(requestTo(containsString("GetOwnedGames")))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.ownedGames("1"))
+                .isInstanceOf(SteamUnavailableException.class);
+    }
+
+    @Test
+    void presentButEmptyResponseObjectReturnsEmptyMap() {
+        // This is what Steam sends for a private profile. It must stay distinguishable
+        // from a missing envelope, which means Steam itself is broken.
+        server.expect(requestTo(containsString("GetOwnedGames")))
+                .andRespond(withSuccess("{\"response\":{}}", MediaType.APPLICATION_JSON));
 
         assertThat(client.ownedGames("1")).isEmpty();
     }

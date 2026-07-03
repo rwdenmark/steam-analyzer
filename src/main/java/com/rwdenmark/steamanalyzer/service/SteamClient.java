@@ -38,8 +38,11 @@ public class SteamClient {
         this.apiKey = props.apiKey();
     }
 
-    /** Resolves a vanity name to a SteamID64. Empty when Steam reports no match. */
-    @Cacheable(value = CacheConfig.VANITY_CACHE, key = "#vanityName.toLowerCase()")
+    /**
+     * Resolves a vanity name to a SteamID64. Empty when Steam reports no match. Misses are
+     * not cached, so a freshly claimed vanity name resolves on the next try.
+     */
+    @Cacheable(value = CacheConfig.VANITY_CACHE, key = "#vanityName.toLowerCase()", unless = "#result.isEmpty()")
     public Optional<String> resolveVanity(String vanityName) {
         Map<String, Object> response = get("/ISteamUser/ResolveVanityURL/v1/", uri -> uri
                 .queryParam("key", apiKey)
@@ -85,12 +88,15 @@ public class SteamClient {
                     })
                     .body(Map.class);
             if (envelope == null || envelope.get("response") == null) {
-                return Map.of();
+                // A well-formed Steam reply always has a response object, even for private
+                // profiles. A missing one means Steam is broken, not that the data is empty.
+                throw new SteamUnavailableException("Steam returned an unexpected reply for " + path + ".", null);
             }
             return (Map<String, Object>) envelope.get("response");
-        } catch (ResourceAccessException timeout) {
-            log.warn("Steam request to {} timed out: {}", path, timeout.getMessage());
-            throw new SteamUnavailableException("Steam did not respond in time.", timeout);
+        } catch (ResourceAccessException failure) {
+            // Log only the class and path. The exception message echoes the full URI, key included.
+            log.warn("Steam request to {} failed: {}", path, failure.getClass().getSimpleName());
+            throw new SteamUnavailableException("Steam did not respond in time.", failure);
         }
     }
 

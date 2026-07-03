@@ -67,11 +67,24 @@ class AnalyzerServiceResolutionTest {
 
     @Test
     void privateLibraryThrowsPrivateProfile() {
-        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of()); // empty response = private
+        // An empty response object with a real summary behind it means private.
+        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of());
+        given(steam.playerSummary(STEAM_ID)).willReturn(Optional.of(summary()));
 
         assertThatThrownBy(() -> service.getLibrary(STEAM_ID, "playtime", false))
                 .isInstanceOf(PrivateProfileException.class)
                 .hasMessageContaining("private");
+    }
+
+    @Test
+    void nonexistentNumericIdThrowsNotFoundNotPrivate() {
+        // A made-up 17-digit ID also comes back empty, but there is no player behind it.
+        given(steam.ownedGames(STEAM_ID)).willReturn(Map.of());
+        given(steam.playerSummary(STEAM_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getLibrary(STEAM_ID, "playtime", false))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("No public Steam profile");
     }
 
     @Test

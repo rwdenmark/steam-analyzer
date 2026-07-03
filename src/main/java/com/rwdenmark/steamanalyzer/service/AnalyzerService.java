@@ -7,6 +7,7 @@ import com.rwdenmark.steamanalyzer.dto.ProfileSummary;
 import com.rwdenmark.steamanalyzer.error.NotFoundException;
 import com.rwdenmark.steamanalyzer.error.PrivateProfileException;
 import com.rwdenmark.steamanalyzer.error.SteamUnavailableException;
+import jakarta.annotation.PreDestroy;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +31,13 @@ import java.util.regex.Pattern;
 public class AnalyzerService {
 
     private static final Pattern STEAMID64 = Pattern.compile("\\d{17}");
+    /**
+     * Words that mark non-game entries (beta/server/dev builds, uploaders). Matched on word
+     * boundaries so Testament and Republic stay visible. Kept in sync with the frontend.
+     */
+    private static final Pattern JUNK_WORDS = Pattern.compile(
+            "\\b(public|test|server|unstable|dedicated|uploader|beta|staging)\\b",
+            Pattern.CASE_INSENSITIVE);
     private static final String CDN = "https://cdn.cloudflare.steamstatic.com/steam/apps/";
     private static final int PLAY_NEXT_LIMIT = 2;
     /** Steam's store appdetails endpoint rate-limits near 200 requests / 5 min per IP. */
@@ -39,10 +47,18 @@ public class AnalyzerService {
     private final SteamClient steam;
     private final SteamStoreClient store;
     private final Random random = new Random();
+    /** One pool shared by all enrich calls. A per-request pool would churn threads for nothing. */
+    private final ExecutorService enrichPool;
 
     public AnalyzerService(SteamClient steam, SteamStoreClient store) {
         this.steam = steam;
         this.store = store;
+        this.enrichPool = Executors.newFixedThreadPool(ENRICH_CONCURRENCY);
+    }
+
+    @PreDestroy
+    void shutdownEnrichPool() {
+        enrichPool.shutdown();
     }
 
     @Cacheable(value = CacheConfig.PROFILE_CACHE, key = "#idOrVanity.toLowerCase()")
@@ -90,6 +106,11 @@ public class AnalyzerService {
     private List<OwnedGame> fetchLibrary(String steamId, boolean enrich) {
         Map<String, Object> response = steam.ownedGames(steamId);
         if (isPrivate(response)) {
+            // A nonexistent SteamID and a private profile both come back empty here, so
+            // check the summary before calling it private. Only runs on this empty path.
+            if (steam.playerSummary(steamId).isEmpty()) {
+                throw new NotFoundException("No public Steam profile for ID " + steamId + ".");
+            }
             throw new PrivateProfileException(
                     "This profile's Game details are private. Set Game details to Public in Steam "
                             + "privacy settings to use this.");
@@ -106,10 +127,10 @@ public class AnalyzerService {
      */
     private List<OwnedGame> enrichDetails(List<OwnedGame> games) {
         int cap = Math.min(games.size(), MAX_ENRICH);
-        try (ExecutorService pool = Executors.newFixedThreadPool(ENRICH_CONCURRENCY)) {
+        try {
             List<Future<OwnedGame>> futures = games.stream()
                     .limit(cap)
-                    .map(g -> pool.submit(() -> {
+                    .map(g -> enrichPool.submit(() -> {
                         AppDetails details = store.appDetails(g.appId());
                         return g.enriched(details.type(), details.free());
                     }))
@@ -175,12 +196,8 @@ public class AnalyzerService {
         return games.stream().sorted(comparator).toList();
     }
 
-    /** Names that mark non-game entries (beta/server/dev builds, uploaders). Kept in sync with the frontend. */
     private static boolean isJunkTitle(String name) {
-        String n = name.toLowerCase();
-        return n.contains("public") || n.contains("test") || n.contains("server")
-                || n.contains("unstable") || n.contains("dedicated") || n.contains("uploader")
-                || n.contains("beta") || n.contains("staging");
+        return JUNK_WORDS.matcher(name).find();
     }
 
     private static String headerImage(long appId) {

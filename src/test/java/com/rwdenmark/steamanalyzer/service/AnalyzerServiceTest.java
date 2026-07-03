@@ -48,7 +48,7 @@ class AnalyzerServiceTest {
                 game("Dedicated Server", 0),
                 game("Game Public Test", 0),
                 game("Hollow Knight", 0),
-                game("Testbed Utility", 0),
+                game("Beta Branch", 0),
                 game("Starbound - Unstable", 0),
                 game("Source SDK Uploader", 0)
         );
@@ -56,6 +56,24 @@ class AnalyzerServiceTest {
         assertThat(AnalyzerService.playNextCandidates(games))
                 .extracting(OwnedGame::name)
                 .containsExactly("Hollow Knight");
+    }
+
+    @Test
+    void playNextCandidatesKeepTitlesWhereJunkWordsAreOnlySubstrings() {
+        // Word-boundary matching. "test" inside Testament or "public" inside Republic
+        // must not hide a real game.
+        List<OwnedGame> games = List.of(
+                game("The Testament of Sherlock Holmes", 0),
+                game("Star Wars: The Old Republic", 0),
+                game("Observer", 0)
+        );
+
+        assertThat(AnalyzerService.playNextCandidates(games))
+                .extracting(OwnedGame::name)
+                .containsExactlyInAnyOrder(
+                        "The Testament of Sherlock Holmes",
+                        "Star Wars: The Old Republic",
+                        "Observer");
     }
 
     @Test

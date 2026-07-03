@@ -9,4 +9,9 @@ public record AppDetails(String type, boolean free) {
     public static AppDetails unknown() {
         return new AppDetails(null, false);
     }
+
+    /** True for the failed-lookup fallback, so callers can skip caching it. */
+    public boolean isUnknown() {
+        return type == null && !free;
+    }
 }

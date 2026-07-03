@@ -189,4 +189,6 @@ table.library { width: 100%; border-collapse: collapse; }
 .lib-loading {
   display: flex;
   align-items: center;
-  justify-content: flex-start
+  justify-content: flex-start;
+  gap: .5rem;
+}

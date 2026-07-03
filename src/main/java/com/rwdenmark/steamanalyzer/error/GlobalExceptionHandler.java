@@ -34,13 +34,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(SteamUnavailableException.class)
     public ResponseEntity<Map<String, Object>> handleUnavailable(SteamUnavailableException ex) {
-        log.warn("Steam upstream unavailable: {}", ex.getMessage());
+        log.warn("Steam upstream unavailable: {}", LogSanitizer.sanitize(ex.getMessage()));
         return body(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAny(Exception ex) {
-        log.error("Unhandled exception", ex);
+        // Logged as a sanitized string, never the raw exception. Transport errors carry the
+        // request URI in their message and the Steam key rides on it as a query param.
+        log.error("Unhandled exception: {}", LogSanitizer.sanitizedStackTrace(ex));
         return body(HttpStatus.INTERNAL_SERVER_ERROR, "Something went wrong.");
     }
 

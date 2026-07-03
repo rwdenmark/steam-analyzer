@@ -19,7 +19,6 @@
 
     <properties>
         <java.version>21</java.version>
-        <caffeine.version>3.2.4</caffeine.version>
     </properties>
 
     <dependencies>
@@ -34,7 +33,6 @@
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
-            <version>${caffeine.version}</version>
         </dependency>
 
         <dependency>

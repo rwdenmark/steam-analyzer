@@ -4,6 +4,7 @@ import com.rwdenmark.steamanalyzer.dto.OwnedGame;
 import com.rwdenmark.steamanalyzer.dto.ProfileSummary;
 import com.rwdenmark.steamanalyzer.error.NotFoundException;
 import com.rwdenmark.steamanalyzer.error.PrivateProfileException;
+import com.rwdenmark.steamanalyzer.error.SteamUnavailableException;
 import com.rwdenmark.steamanalyzer.service.AnalyzerService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +60,17 @@ class ProfileControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.message").value("This profile's Game details are private."));
+    }
+
+    @Test
+    void steamOutageReturns502() throws Exception {
+        given(analyzer.getProfile(anyString()))
+                .willThrow(new SteamUnavailableException("Steam did not respond in time.", null));
+
+        mvc.perform(get("/api/profile/{id}", ID))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.status").value(502))
+                .andExpect(jsonPath("$.message").value("Steam did not respond in time."));
     }
 
     @Test

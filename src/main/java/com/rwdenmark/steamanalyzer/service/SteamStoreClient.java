@@ -25,7 +25,8 @@ public class SteamStoreClient {
         this.store = steamStoreRestClient;
     }
 
-    @Cacheable(value = CacheConfig.APP_DETAILS_CACHE, key = "#appId")
+    /** Unknown results are not cached, so a failed lookup gets retried on the next request. */
+    @Cacheable(value = CacheConfig.APP_DETAILS_CACHE, key = "#appId", unless = "#result.isUnknown()")
     @SuppressWarnings("unchecked")
     public AppDetails appDetails(long appId) {
         try {

@@ -96,7 +96,15 @@ async function analyze(idOrVanity) {
 async function getJson(url) {
   const res = await fetch(url);
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // A proxy 502 page is HTML, not JSON. Never surface a raw parse error.
+      throw new Error("The server returned an unexpected error.");
+    }
+  }
   if (!res.ok) {
     throw new Error(data.message || `${res.status} ${res.statusText}`);
   }
@@ -407,12 +415,11 @@ function isUnplayed(g) {
   return filters.barely ? g.playtimeHours < 1 : g.playtimeMinutes === 0;
 }
 
-// Non-game entries by name. Mirrors the backend isJunkTitle.
+// Non-game entries by name. Word-boundary match so Testament and Republic stay
+// visible. Mirrors the backend isJunkTitle, keep the word list in sync.
+const JUNK_WORDS = /\b(public|test|server|unstable|dedicated|uploader|beta|staging)\b/i;
 function isJunkTitle(name) {
-  const n = name.toLowerCase();
-  return n.includes("public") || n.includes("test") || n.includes("server") ||
-    n.includes("unstable") || n.includes("dedicated") || n.includes("uploader") ||
-    n.includes("beta") || n.includes("staging");
+  return JUNK_WORDS.test(name);
 }
 
 function isToolLike(g) {
