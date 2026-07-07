@@ -5,6 +5,7 @@ import com.rwdenmark.steamanalyzer.config.SteamProperties;
 import com.rwdenmark.steamanalyzer.error.SteamUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -33,8 +34,10 @@ public class SteamClient {
     private final RestClient client;
     private final String apiKey;
 
-    public SteamClient(RestClient steamApiClient, SteamProperties props) {
-        this.client = steamApiClient;
+    // Two RestClient beans exist, the qualifier picks the Web API one explicitly.
+    public SteamClient(@Qualifier("steamApiRestClient") RestClient steamApiRestClient,
+                       SteamProperties props) {
+        this.client = steamApiRestClient;
         this.apiKey = props.apiKey();
     }
 

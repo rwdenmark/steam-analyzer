@@ -41,7 +41,8 @@ class SteamClientCachingTest {
         server = MockRestServiceServer.bindTo(builder).build();
         context = new AnnotationConfigApplicationContext();
         context.register(CachingConfig.class, CacheConfig.class);
-        context.registerBean(RestClient.class, builder::build);
+        // SteamClient's constructor qualifier expects this exact bean name.
+        context.registerBean("steamApiRestClient", RestClient.class, builder::build);
         context.registerBean(SteamProperties.class, () -> new SteamProperties("TEST_KEY", BASE));
         context.registerBean(SteamClient.class);
         context.refresh();

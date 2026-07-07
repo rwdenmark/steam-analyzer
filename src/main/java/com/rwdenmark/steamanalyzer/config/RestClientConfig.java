@@ -10,9 +10,13 @@ import java.time.Duration;
 @Configuration
 public class RestClientConfig {
 
+    // The RestClient suffix keeps these bean names clear of the component classes.
+    // SteamStoreClient's own bean is named steamStoreClient, so a factory method with
+    // that name collides at boot with a BeanDefinitionOverrideException.
+
     /** Steam Web API client. Short timeouts keep a slow Steam from hanging a request thread. */
     @Bean
-    public RestClient steamApiClient(SteamProperties props) {
+    public RestClient steamApiRestClient(SteamProperties props) {
         return RestClient.builder()
                 .requestFactory(timeoutFactory())
                 .baseUrl(props.apiBaseUrl())
@@ -21,7 +25,7 @@ public class RestClientConfig {
 
     /** Public store appdetails client, separate base URL from the Web API. */
     @Bean
-    public RestClient steamStoreClient() {
+    public RestClient steamStoreRestClient() {
         return RestClient.builder()
                 .requestFactory(timeoutFactory())
                 .baseUrl("https://store.steampowered.com")

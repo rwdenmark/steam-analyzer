@@ -39,7 +39,8 @@ class SteamStoreClientCachingTest {
         server = MockRestServiceServer.bindTo(builder).build();
         context = new AnnotationConfigApplicationContext();
         context.register(CachingConfig.class, CacheConfig.class);
-        context.registerBean(RestClient.class, builder::build);
+        // SteamStoreClient's constructor qualifier expects this exact bean name.
+        context.registerBean("steamStoreRestClient", RestClient.class, builder::build);
         context.registerBean(SteamStoreClient.class);
         context.refresh();
         client = context.getBean(SteamStoreClient.class);

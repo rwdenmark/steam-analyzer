@@ -4,6 +4,7 @@ import com.rwdenmark.steamanalyzer.config.CacheConfig;
 import com.rwdenmark.steamanalyzer.dto.AppDetails;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -30,8 +31,9 @@ public class SteamStoreClient {
     private final AtomicInteger callsInWindow = new AtomicInteger();
     private volatile long windowStart;
 
-    public SteamStoreClient(RestClient steamStoreClient) {
-        this.store = steamStoreClient;
+    // Two RestClient beans exist, the qualifier picks the store one explicitly.
+    public SteamStoreClient(@Qualifier("steamStoreRestClient") RestClient steamStoreRestClient) {
+        this.store = steamStoreRestClient;
     }
 
     /** Unknown results are not cached, so a failed lookup gets retried on the next request. */
