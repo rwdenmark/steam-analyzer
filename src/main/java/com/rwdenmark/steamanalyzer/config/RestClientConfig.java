@@ -21,7 +21,7 @@ public class RestClientConfig {
 
     /** Public store appdetails client, separate base URL from the Web API. */
     @Bean
-    public RestClient steamStoreRestClient() {
+    public RestClient steamStoreClient() {
         return RestClient.builder()
                 .requestFactory(timeoutFactory())
                 .baseUrl("https://store.steampowered.com")

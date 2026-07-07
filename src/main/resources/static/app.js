@@ -10,7 +10,7 @@ const sortSelect = $("sort");
 let allGames = [];
 let currentSteamId = null;
 let enriched = false;
-const filters = { free: false, tools: false, played: false, barely: false, group: false };
+const filters = { free: false, tools: false, played: false, underHour: false, group: false };
 
 const COG_SVG =
   '<svg class="cog" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
@@ -63,13 +63,19 @@ async function ensureEnriched() {
     allGames = await getJson(`api/profile/${encodeURIComponent(currentSteamId)}/library?enrich=true`);
     enriched = true;
   } catch (err) {
-    showError(err.message);
+    // Message only, no hideResults. The profile, toggles, and library are still valid,
+    // and the user retries by pressing the toggle again.
+    showErrorMessage(err.message);
     throw err;
   }
 }
 
 const DEFAULT_PROFILE = "mrzeu";
 window.addEventListener("DOMContentLoaded", () => analyze(DEFAULT_PROFILE));
+
+// Bumped on every analyze and on showError, so an in-flight renderNext from a
+// run that already failed cannot re-show its card under the error banner.
+let analyzeGen = 0;
 
 async function analyze(idOrVanity) {
   setBusy(true);
@@ -80,11 +86,17 @@ async function analyze(idOrVanity) {
     currentSteamId = profile.steamId;
     enriched = false;
     resetFilters();
-    allGames = await getJson(`api/profile/${encodeURIComponent(profile.steamId)}/library`);
     renderProfile(profile);
-    await renderNext();
-    renderLibrary();
-    show("toggles");
+    // The library and play-next fetches only depend on the profile, not on each other,
+    // so they run in parallel and each renders as soon as its data lands.
+    const gen = ++analyzeGen;
+    const libraryDone = getJson(`api/profile/${encodeURIComponent(profile.steamId)}/library`)
+      .then((games) => {
+        allGames = games;
+        renderLibrary();
+        show("toggles");
+      });
+    await Promise.all([libraryDone, renderNext(gen)]);
     clearStatus();
   } catch (err) {
     showError(err.message);
@@ -176,7 +188,7 @@ function showLoadingState() {
   show("library-section");
 }
 
-async function renderNext() {
+async function renderNext(gen) {
   let picks = [];
   try {
     picks = await getJson(`api/profile/${encodeURIComponent(currentSteamId)}/next`);
@@ -184,6 +196,7 @@ async function renderNext() {
     hide("next");
     return;
   }
+  if (gen !== analyzeGen) return;
   if (picks.length === 0) {
     hide("next");
     return;
@@ -291,19 +304,21 @@ function groupBases(bases) {
     const ra = find(a), rb = find(b);
     if (ra !== rb) parent.set(ra, rb);
   }
+  // Split every base once up front. Splitting inside the pairwise loop is O(n^2) splits,
+  // which is millions of them on a large library.
+  const words = bases.map((b) => b.split(" "));
   const byPrefix = new Map();
-  for (const b of bases) {
-    const w = b.split(" ");
+  for (let i = 0; i < bases.length; i++) {
+    const w = words[i];
     if (w.length >= 2 && !CONNECTORS.has(w[1])) {
       const k = w[0] + " " + w[1];
-      if (byPrefix.has(k)) union(b, byPrefix.get(k));
-      else byPrefix.set(k, b);
+      if (byPrefix.has(k)) union(bases[i], byPrefix.get(k));
+      else byPrefix.set(k, bases[i]);
     }
   }
   for (let i = 0; i < bases.length; i++) {
-    const a = bases[i].split(" ");
     for (let j = 0; j < bases.length; j++) {
-      if (i !== j && isContiguous(a, bases[j].split(" "))) union(bases[i], bases[j]);
+      if (i !== j && isContiguous(words[i], words[j])) union(bases[i], bases[j]);
     }
   }
   const root = new Map();
@@ -393,7 +408,7 @@ function passesFilters(g) {
 
 // "Under 1h" treats games showing under 1 hour (the rounded Hours column) as backlog.
 function isUnplayed(g) {
-  return filters.barely ? g.playtimeHours < 1 : g.playtimeMinutes === 0;
+  return filters.underHour ? g.playtimeHours < 1 : g.playtimeMinutes === 0;
 }
 
 function isToolLike(g) {
@@ -424,10 +439,16 @@ function showStatus(msg) {
   statusEl.hidden = false;
 }
 
-function showError(msg) {
+// Error message with the current results left in place, for recoverable failures.
+function showErrorMessage(msg) {
   statusEl.textContent = msg;
   statusEl.classList.add("error");
   statusEl.hidden = false;
+}
+
+function showError(msg) {
+  analyzeGen++;
+  showErrorMessage(msg);
   hideResults();
 }
 
@@ -440,4 +461,5 @@ function hideResults() {
 }
 
 function show(id) { $(id).hidden = false; }
+
 function hide(id) { $(id).hidden = true; }

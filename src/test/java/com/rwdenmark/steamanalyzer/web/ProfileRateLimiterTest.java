@@ -1,4 +1,4 @@
-package com.rwdenmark.steamanalyzer.controller;
+package com.rwdenmark.steamanalyzer.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

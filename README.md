@@ -38,7 +38,9 @@ for the Steam calls. Frontend is a single static page (plain HTML/CSS/JS) served
    Or with a system Maven, `mvn spring-boot:run`. You can also export the key instead of
    using a file, `STEAM_API_KEY=xxxx mvn spring-boot:run`.
 
-3. Open http://localhost:8080 and enter a vanity name or a 17-digit SteamID.
+3. Open http://localhost:8080 and enter a vanity name or a 17-digit SteamID. The page
+   analyzes the demo profile `mrzeu` on load, so the dashboard is populated before you
+   type anything.
 
 ## API
 
@@ -84,8 +86,8 @@ is fetched lazily. The dashboard loads the library without it, and the first pre
 Tools requests `/library?enrich=true` to pull those fields from the public store `appdetails`
 endpoint. That endpoint has no batch form and rate-limits near 200 requests per five minutes,
 so lookups run six at a time on one thread pool shared across requests, capped at 200 per
-request, cached per appid for a week. A
-failed lookup, or a game past the cap, stays unenriched and is never hidden. Played and
+request and 200 per five-minute window across all requests, cached per appid for a week. A
+failed lookup, or a game past either cap, stays unenriched and is never hidden. Played and
 sorting need no extra data, so they stay instant.
 
 ## Error handling
@@ -122,19 +124,11 @@ next request.
 ./mvnw test
 ```
 
-`AnalyzerServiceTest` covers the play-next candidate filter as a pure function (no network). `AnalyzerServiceResolutionTest` covers vanity-vs-id branching,
-vanity miss, the private-profile path, the play-next pick, the enrich path, and the
-200-lookup cap with the Steam clients mocked. `SteamClientTest` and `SteamStoreClientTest`
-use `MockRestServiceServer` to run real Steam-shaped JSON through the map parsing. That
-covers the vanity success/no-match codes, the response-envelope unwrapping, the timeout and
-error-to-502 mapping, and the appdetails type/free extraction with its `unknown()`
-fallbacks. `ProfileControllerTest` is a WebMvc slice test asserting the JSON, the `junk`
-flag, and the 404/403 error mappings. `OwnedGameTest` covers the junk classifier's word
-boundaries. `ProfileRateLimiterTest` drives the sliding window through a clock seam, no
-sleeps, covering the pass, 429, expiry, and client-key paths. `SteamClientCachingTest` and
-`SteamStoreClientCachingTest` run the clients behind the real cache to prove a vanity miss
-and a failed appdetails lookup retry instead of being cached. `LogSanitizerTest` proves the
-API key never survives into a log line. `HealthControllerTest` covers the probe.
+Most test classes cover what their names say. The non-obvious ones are
+`ProfileRateLimiterTest`, which drives the sliding window through a clock seam so no test
+sleeps, `SteamClientCachingTest` and `SteamStoreClientCachingTest`, which run the clients
+behind the real cache to prove a miss or failed lookup retries instead of being cached,
+and `LogSanitizerTest`, which proves the API key never survives into a log line.
 
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs the same suite on every push
 to main and every pull request.

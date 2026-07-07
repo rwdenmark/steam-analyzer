@@ -21,6 +21,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /**
@@ -39,6 +41,12 @@ public class AnalyzerService {
 
     private final SteamClient steam;
     private final SteamStoreClient store;
+    /**
+     * Overall deadline for one enrich pass. The pool is shared across requests, so without
+     * it one slow request could hold a servlet thread for minutes. Package-private so tests
+     * can shrink it. Lookups past the deadline stay unenriched and uncached, retried later.
+     */
+    long enrichDeadlineMs = 30_000;
     private final Random random = new Random();
     /** One pool shared by all enrich calls. A per-request pool would churn threads for nothing. */
     private final ExecutorService enrichPool;
@@ -129,8 +137,19 @@ public class AnalyzerService {
                     }))
                     .toList();
             List<OwnedGame> enriched = new ArrayList<>(games.size());
-            for (Future<OwnedGame> future : futures) {
-                enriched.add(future.get());
+            long deadline = System.currentTimeMillis() + enrichDeadlineMs;
+            for (int i = 0; i < futures.size(); i++) {
+                Future<OwnedGame> future = futures.get(i);
+                try {
+                    long remaining = deadline - System.currentTimeMillis();
+                    enriched.add(future.get(Math.max(0, remaining), TimeUnit.MILLISECONDS));
+                } catch (TimeoutException e) {
+                    // Past the deadline. Cancel the lookup and keep the unenriched game. A
+                    // canceled miss stays uncached and retries later. If the store call
+                    // finishes despite the cancel, caching its valid result is harmless.
+                    future.cancel(true);
+                    enriched.add(games.get(i));
+                }
             }
             // Games beyond the cap keep their unenriched form, so they are never hidden.
             enriched.addAll(games.subList(cap, games.size()));
@@ -166,9 +185,9 @@ public class AnalyzerService {
     }
 
     private static OwnedGame toOwnedGame(Map<String, Object> g) {
-        long appId = asLong(g.get("appid"));
+        long appId = JsonNumbers.asLong(g.get("appid"));
         String name = g.get("name") instanceof String s && !s.isBlank() ? s : "Unknown (" + appId + ")";
-        return OwnedGame.of(appId, name, asInt(g.get("playtime_forever")), headerImage(appId));
+        return OwnedGame.of(appId, name, JsonNumbers.asInt(g.get("playtime_forever")), headerImage(appId));
     }
 
     /** Never-played actual games with junk titles skipped, the pool getPlayNext draws random picks from. */
@@ -191,13 +210,5 @@ public class AnalyzerService {
 
     private static String headerImage(long appId) {
         return CDN + appId + "/header.jpg";
-    }
-
-    private static int asInt(Object o) {
-        return o instanceof Number n ? n.intValue() : 0;
-    }
-
-    private static long asLong(Object o) {
-        return o instanceof Number n ? n.longValue() : 0L;
     }
 }

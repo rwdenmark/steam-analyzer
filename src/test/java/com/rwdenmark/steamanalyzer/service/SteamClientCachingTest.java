@@ -18,8 +18,8 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * Runs the Steam client behind the real cache to prove a vanity miss is retried on the
- * next call while a match is served from cache.
+ * Runs the Steam client behind the real cache to prove a vanity or summary miss is
+ * retried on the next call while a match is served from cache.
  */
 class SteamClientCachingTest {
 
@@ -77,6 +77,35 @@ class SteamClientCachingTest {
         assertThat(client.resolveVanity("gabe")).contains(STEAM_ID);
         // Must come from the cache. The mock server has no second response queued.
         assertThat(client.resolveVanity("gabe")).contains(STEAM_ID);
+        server.verify();
+    }
+
+    @Test
+    void summaryMissIsNotCachedAndIsRetried() {
+        server.expect(requestTo(containsString("GetPlayerSummaries")))
+                .andRespond(withSuccess("{\"response\":{\"players\":[]}}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("GetPlayerSummaries")))
+                .andRespond(withSuccess(
+                        "{\"response\":{\"players\":[{\"personaname\":\"Rabscuttle\"}]}}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(client.playerSummary(STEAM_ID)).isEmpty();
+        // The miss was not cached, so the second call reaches Steam and finds the player.
+        assertThat(client.playerSummary(STEAM_ID))
+                .hasValueSatisfying(s -> assertThat(s.get("personaname")).isEqualTo("Rabscuttle"));
+        server.verify();
+    }
+
+    @Test
+    void summaryMatchIsCached() {
+        server.expect(requestTo(containsString("GetPlayerSummaries")))
+                .andRespond(withSuccess(
+                        "{\"response\":{\"players\":[{\"personaname\":\"Rabscuttle\"}]}}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(client.playerSummary(STEAM_ID)).isPresent();
+        // Must come from the cache. The mock server has no second response queued.
+        assertThat(client.playerSummary(STEAM_ID)).isPresent();
         server.verify();
     }
 }

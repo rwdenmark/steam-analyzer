@@ -1,5 +1,6 @@
-package com.rwdenmark.steamanalyzer.controller;
+package com.rwdenmark.steamanalyzer.web;
 
+import com.rwdenmark.steamanalyzer.error.ApiError;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,7 +11,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
@@ -55,15 +55,12 @@ public class ProfileRateLimiter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        // Same envelope GlobalExceptionHandler.body builds. The filter answers before
-        // the dispatcher, so the advice never sees this request. All fields are ASCII
-        // constants except the timestamp, so the JSON is safe to build by hand.
+        // Same envelope GlobalExceptionHandler uses, via the shared formatter. The filter
+        // answers before the dispatcher, so the advice never sees this request.
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(
-                "{\"status\":429,\"error\":\"Too Many Requests\","
-                        + "\"message\":\"Too many requests. Give it a minute and try again.\","
-                        + "\"timestamp\":\"" + Instant.now() + "\"}");
+        response.getWriter().write(ApiError.json(HttpStatus.TOO_MANY_REQUESTS,
+                "Too many requests. Give it a minute and try again."));
     }
 
     private String clientKey(HttpServletRequest request) {

@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.time.Instant;
 import java.util.Map;
 
 @RestControllerAdvice
@@ -47,11 +46,6 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<Map<String, Object>> body(HttpStatus status, String message) {
-        return ResponseEntity.status(status).body(Map.of(
-                "status", status.value(),
-                "error", status.getReasonPhrase(),
-                "message", message == null ? "" : message,
-                "timestamp", Instant.now().toString()
-        ));
+        return ResponseEntity.status(status).body(ApiError.body(status, message));
     }
 }

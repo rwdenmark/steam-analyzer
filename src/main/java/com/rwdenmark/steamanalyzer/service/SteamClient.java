@@ -49,14 +49,18 @@ public class SteamClient {
         Map<String, Object> response = get("/ISteamUser/ResolveVanityURL/v1/", uri -> uri
                 .queryParam("key", apiKey)
                 .queryParam("vanityurl", vanityName));
-        if (asInt(response.get("success")) != VANITY_MATCH) {
+        if (JsonNumbers.asInt(response.get("success")) != VANITY_MATCH) {
             return Optional.empty();
         }
         return Optional.ofNullable((String) response.get("steamid"));
     }
 
-    /** Display name, avatar, and profile URL for one SteamID64. Empty if none. */
-    @Cacheable(value = CacheConfig.SUMMARY_CACHE, key = "#steamId")
+    /**
+     * Display name, avatar, and profile URL for one SteamID64. Empty if none. Misses are
+     * not cached, same unwrapped-Optional rule as resolveVanity, so a profile that turns
+     * public is picked up on the next try instead of after the TTL.
+     */
+    @Cacheable(value = CacheConfig.SUMMARY_CACHE, key = "#steamId", unless = "#result == null")
     @SuppressWarnings("unchecked")
     public Optional<Map<String, Object>> playerSummary(String steamId) {
         Map<String, Object> response = get("/ISteamUser/GetPlayerSummaries/v2/", uri -> uri
@@ -105,9 +109,5 @@ public class SteamClient {
     /** 5xx and 429 mean Steam is down or throttling us, so surface 502. Other 4xx are our bad request. */
     private static boolean isUnavailable(HttpStatusCode status) {
         return status.is5xxServerError() || status.value() == 429;
-    }
-
-    private static int asInt(Object o) {
-        return o instanceof Number n ? n.intValue() : 0;
     }
 }

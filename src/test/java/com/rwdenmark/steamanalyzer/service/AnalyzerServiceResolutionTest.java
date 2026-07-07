@@ -156,6 +156,25 @@ class AnalyzerServiceResolutionTest {
     }
 
     @Test
+    void slowEnrichLookupsTimeOutAndStayUnenriched() {
+        given(steam.ownedGames(STEAM_ID)).willReturn(publicLibrary());
+        given(store.appDetails(org.mockito.ArgumentMatchers.anyLong())).willAnswer(inv -> {
+            Thread.sleep(5_000); // far past the deadline, interrupted by the cancel
+            return new AppDetails("game", false);
+        });
+        service.enrichDeadlineMs = 50;
+
+        long start = System.currentTimeMillis();
+        List<OwnedGame> library = service.getLibrary(STEAM_ID, "name", true);
+
+        // The request came back at the deadline, not after the slow lookups, and every
+        // game kept its unenriched form, the same shape as a failed lookup.
+        assertThat(System.currentTimeMillis() - start).isLessThan(4_000);
+        assertThat(library).hasSize(2);
+        assertThat(library).allMatch(g -> g.type() == null);
+    }
+
+    @Test
     void enrichmentIsCappedToProtectTheRateLimit() {
         int count = 250;
         List<Map<String, Object>> games = new ArrayList<>();

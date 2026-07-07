@@ -11,8 +11,9 @@ import java.time.Duration;
 @Configuration
 public class CacheConfig {
 
+    // Cache names are all lowercase plural.
     /** Resolved vanity name to SteamID64. Stable, so cached longer. */
-    public static final String VANITY_CACHE = "vanity";
+    public static final String VANITY_CACHE = "vanities";
     /** idOrVanity to resolved profile identity. Short TTL keeps it fresh. */
     public static final String PROFILE_CACHE = "profiles";
     /** SteamID64 to player summary (name, avatar). Short TTL keeps it fresh. */
@@ -20,7 +21,7 @@ public class CacheConfig {
     /** SteamID64 to owned-games list, shared by the library and next endpoints. */
     public static final String LIBRARY_CACHE = "libraries";
     /** AppID to store type and free flag. App types rarely change, so cached for a week. */
-    public static final String APP_DETAILS_CACHE = "appDetails";
+    public static final String APP_DETAILS_CACHE = "appdetails";
 
     @Bean
     public CacheManager cacheManager() {
